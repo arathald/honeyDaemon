@@ -2,4 +2,6 @@
 
 [ -n "$1" ] && CHANNEL=$1
 
+sleep 0.$((RANDOM % 8))
+
 send "PART $CHANNEL"

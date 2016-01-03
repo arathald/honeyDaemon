@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Copyright (C) 2012 Josh Cartwright <joshc@linux.com>
+# Copyright (C) 2012 Josh Cartwright <joshc@linux.c
+# Copyleft (?) 2016 [Awaxx] <???>
+# Compare with:
+# - https://github.com/joshcartwright/bashbot
+# to see all modifs done by [Awaxx].
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -18,6 +22,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+#set -x
+
+# the admin that can type commands it includes builtin ones!
+BB_ADM=">>ADMIN_NAME<<"
 
 [ -r bashbot.config ] || cat >bashbot.config <<-EOF
 	nick=bashbot
@@ -28,9 +36,11 @@ EOF
 
 source bashbot.config
 
+[ -r colors.sh ] &&  source colors.sh
+
 # Basic helpers for communication with via IRC protocol
-recv() { echo "< $@" >&2; }
-send() { echo "> $@" >&2;
+recv() { red "< $@" >&2; }
+send() { green "> $@" >&2;
          printf "%s\r\n" "$@" >&3; }
 export -f send
 
@@ -61,6 +71,8 @@ run_filters() {
 
 reload_filters
 
+TIMESTAMP=$(LANG= TZ= date +'%s')
+
 declare -A builtin_commands
 
 bashbot_args=("$0" "$@")
@@ -75,16 +87,19 @@ builtin_commands[reload]=builtin_reload
 
 builtin_filters()
 {
-   echo "active filters:";
+   echo " active filters:";
+   num=1
    for f in "${!filters[@]}"; do
-      printf "%-20s: %s\n" "$f" "${filters[$f]}"
+      printf " #%d %-20s: %s\n" "$num" "$f" "${filters[$f]}"
+      ((num++))
    done
+   reload_filters
 }
 builtin_commands[filters]=builtin_filters
 
 builtin_list()
 {
-   echo -n "available commands: ${!builtin_commands[@]} "
+   echo -n " available commands: ${!builtin_commands[@]} "
    (cd commands; echo *;)
 }
 builtin_commands[list]=builtin_list
@@ -109,7 +124,6 @@ BOTNICK=$nick
 export CHANNEL NAME BOTNICK
 
 while read -r line; do
-
    # strip trailing carriage return
    line=${line%%$'\r'}
 
@@ -138,16 +152,28 @@ while read -r line; do
       set -- "${3#:}" "${@:4}"
       ;;
    "PRIVMSG "*" :$nick: "*)
+      echo "$(LANG= TZ= date) - <$CHANNEL::$NAME> $nick: ${@:4}" >> "records/$NAME"
       CHANNEL=$2
       prefix="PRIVMSG $CHANNEL :$NAME"
       set -- "${@:4}"
       ;;
    "PRIVMSG "*" :"*)
+      # filters incoming datas
       CHANNEL=$2
-      run_filters "${3#:}" "${@:4}" | while IFS= read -r line; do
-         send "PRIVMSG $CHANNEL :$line"
-      done&
-      continue
+      now=$(LANG= TZ= date +'%s')
+      echo "$(LANG= TZ= date) - <$CHANNEL::$NAME> ${3#:} ${@:4}" >> "records/$NAME"
+      re='^![a-z]+'
+      if [[ "${3#:}" =~ $re ]]; then
+         if [  $now -lt $(($TIMESTAMP+5)) ]; then
+            continue
+         else
+            TIMESTAMP=$(LANG= TZ= date +'%s')
+            run_filters "${3#:}" "${@:4}" | while IFS= read -r line; do
+               send "PRIVMSG $CHANNEL :$line"
+            done&
+            continue
+         fi
+      fi
       ;;
    *)
       continue
@@ -160,23 +186,25 @@ while read -r line; do
 
    # reload is handled specially.  we can't leave the | while read subshell
    # hangin' during re-exec, or it will be orphaned
-   case "$cmd" in
-   reload)
-      builtin_reload "$@"
-      continue
-      ;;
-   esac
+   if [ $NAME == $BB_ADM ]; then
+      case "$cmd" in
+      reload)
+         builtin_reload "$@"
+         continue
+         ;;
+      esac
 
-   # note, builtin commands run in-process
-   if [ -n "${builtin_commands[$cmd]}" ]; then
-      "${builtin_commands[$cmd]}" "$@"
-      continue
-   elif [ -x "commands/$cmd" ]; then
-      "commands/$cmd" "$@"
-   else
-      "commands/insult"
-   fi | while IFS= read -r line; do
-      send "$prefix:$line"
-   done&
+      # note, builtin commands run in-process
+      if [ -n "${builtin_commands[$cmd]}" ]; then
+         "${builtin_commands[$cmd]}" "$@"
+         continue
+      elif [ -x "commands/$cmd" ]; then
+         "commands/$cmd" "$@"
+      #else
+         #source "filters/random_sentence.sh"
+      fi | while IFS= read -r line; do
+         send "$prefix:$line"
+      done&
+   fi
 
 done <&3

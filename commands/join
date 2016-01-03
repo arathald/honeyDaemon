@@ -2,4 +2,6 @@
 
 [ -n "$1" ] || { echo "usage: join <channel>"; exit 1; }
 
+sleep 0.$((RANDOM % 8))
+
 send "JOIN $1"

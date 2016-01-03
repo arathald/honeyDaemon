@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+[ -n "$1" ] || { echo -e " This is bc 1.06.95 - An arbitrary precision calculator language\n Copyright 1991-1994, 1997, 1998, 2000, 2004, 2006 Free Software Foundation, Inc.\n Options used:\n  -s #non-standard bc constructs are errors.\n  -l #use the predefined math routines.\n  the floating numbers scale set to 2."; exit 0; }
+
+sleep 0.$((RANDOM % 8))
+
+echo " "$(bc -sl <<<"scale=2; ${1}")
